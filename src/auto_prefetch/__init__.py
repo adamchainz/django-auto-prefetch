@@ -97,6 +97,7 @@ class QuerySet(models.QuerySet):
         if (
             set_peers
             and issubclass(self._iterable_class, models.query.ModelIterable)
+            and self._result_cache is not None
             and len(self._result_cache) >= 2
         ):
             peers = WeakValueDictionary((id(o), o) for o in self._result_cache)
@@ -108,6 +109,8 @@ Manager = models.Manager.from_queryset(QuerySet)
 
 
 class Model(models.Model):
+    _peers: WeakValueDictionary[str, Model]
+
     class Meta:
         abstract = True
         base_manager_name = "prefetch_manager"
@@ -126,8 +129,8 @@ class Model(models.Model):
         return res
 
     @classmethod
-    def check(cls, **kwargs: Any) -> list[checks.Error]:
-        errors: list[checks.Error] = super().check(**kwargs)
+    def check(cls, **kwargs: Any) -> list[checks.CheckMessage]:
+        errors: list[checks.CheckMessage] = super().check(**kwargs)
         errors.extend(cls._check_meta_inheritance())
         return errors
 

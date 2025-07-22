@@ -54,3 +54,5 @@ repos:
   rev: 0f86793af5ef5f6dc63c8d04a3cabfa3ea8f9c6a  # frozen: v1.16.1
   hooks:
   - id: mypy
+    additional_dependencies:
+    - django-stubs==5.1.0
