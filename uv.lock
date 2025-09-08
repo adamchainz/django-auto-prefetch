@@ -138,8 +138,8 @@ name = "django"
 version = "4.2.23"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version < '3.10'",
     "python_full_version >= '3.10'",
+    "python_full_version < '3.10'",
 ]
 dependencies = [
     { name = "asgiref", marker = "python_full_version < '3.10' or extra == 'group-20-django-auto-prefetch-django42' or (extra == 'group-20-django-auto-prefetch-django50' and extra == 'group-20-django-auto-prefetch-django51') or (extra == 'group-20-django-auto-prefetch-django50' and extra == 'group-20-django-auto-prefetch-django52') or (extra == 'group-20-django-auto-prefetch-django51' and extra == 'group-20-django-auto-prefetch-django52')" },
@@ -204,7 +204,7 @@ wheels = [
 
 [[package]]
 name = "django-auto-prefetch"
-version = "1.12.0"
+version = "1.13.0"
 source = { editable = "." }
 dependencies = [
     { name = "django", version = "4.2.23", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10' or extra == 'group-20-django-auto-prefetch-django42' or (extra == 'group-20-django-auto-prefetch-django50' and extra == 'group-20-django-auto-prefetch-django51') or (extra == 'group-20-django-auto-prefetch-django50' and extra == 'group-20-django-auto-prefetch-django52') or (extra == 'group-20-django-auto-prefetch-django51' and extra == 'group-20-django-auto-prefetch-django52')" },

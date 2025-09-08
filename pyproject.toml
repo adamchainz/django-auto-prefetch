@@ -6,7 +6,7 @@ requires = [
 
 [project]
 name = "django-auto-prefetch"
-version = "1.12.0"
+version = "1.13.0"
 description = "Automatically prefetch foreign key values as needed."
 readme = "README.rst"
 license = "BSD-3-Clause"
