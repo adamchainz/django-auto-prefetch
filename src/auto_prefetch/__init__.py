@@ -10,7 +10,7 @@ from django.db.models.fields import related_descriptors
 if TYPE_CHECKING:  # pragma: no cover
 
     class DescriptorBase:
-        field: models.Field
+        field: models.Field[Any, Any]
 
         def is_cached(self, instance: models.Model) -> bool: ...
 
@@ -45,16 +45,21 @@ class DescriptorMixin(DescriptorBase):
     ) -> Any:
         if instance is not None and self._should_prefetch(instance):
             prefetch = models.query.Prefetch(self._field_name())
-            peers = [p for p in instance._peers.values() if not self._is_cached(p)]
+            peers = [
+                p
+                for p in instance._peers.values()  # type: ignore [attr-defined]
+                if not self._is_cached(p)
+            ]
             models.query.prefetch_related_objects(peers, prefetch)
         return super().__get__(instance, instance_type)
 
 
 class ForwardDescriptorMixin(DescriptorMixin):
     def _should_prefetch(self, instance: models.Model | None) -> bool:
-        return super()._should_prefetch(
-            instance
-        ) and None not in self.field.get_local_related_value(instance)  # field is null
+        return super()._should_prefetch(instance) and (
+            # field is null
+            None not in self.field.get_local_related_value(instance)  # type: ignore [attr-defined]
+        )
 
 
 class ForwardManyToOneDescriptor(
@@ -97,6 +102,7 @@ class QuerySet(models.QuerySet):
         if (
             set_peers
             and issubclass(self._iterable_class, models.query.ModelIterable)
+            and self._result_cache is not None
             and len(self._result_cache) >= 2
         ):
             peers = WeakValueDictionary((id(o), o) for o in self._result_cache)
@@ -108,6 +114,8 @@ Manager = models.Manager.from_queryset(QuerySet)
 
 
 class Model(models.Model):
+    _peers: WeakValueDictionary[str, Model]
+
     class Meta:
         abstract = True
         base_manager_name = "prefetch_manager"
@@ -126,8 +134,8 @@ class Model(models.Model):
         return res
 
     @classmethod
-    def check(cls, **kwargs: Any) -> list[checks.Error]:
-        errors: list[checks.Error] = super().check(**kwargs)
+    def check(cls, **kwargs: Any) -> list[checks.CheckMessage]:
+        errors: list[checks.CheckMessage] = super().check(**kwargs)
         errors.extend(cls._check_meta_inheritance())
         return errors
 
