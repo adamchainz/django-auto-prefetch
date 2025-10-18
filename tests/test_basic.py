@@ -207,7 +207,7 @@ def test_multiples(django_assert_num_queries, Model, queries):
 
 @pytest.mark.django_db
 def test_garbage_collection():
-    def check_instances(num):
+    def check_instances(num: int) -> None:
         gc.collect()
         objs = [o for o in gc.get_objects() if isinstance(o, Prefetch)]
         assert len(objs) == num
