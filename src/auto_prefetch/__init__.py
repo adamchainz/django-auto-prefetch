@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeGuard
 from weakref import WeakValueDictionary
 
 from django.core import checks
@@ -31,7 +31,9 @@ class DescriptorMixin(DescriptorBase):
     def _is_cached(self, instance: models.Model) -> bool:
         return self.is_cached(instance)
 
-    def _should_prefetch(self, instance: models.Model | None) -> bool:
+    def _should_prefetch(
+        self, instance: models.Model | None
+    ) -> TypeGuard[models.Model]:
         return (
             instance is not None  # getattr on the class passes None to the descriptor
             and not self._is_cached(instance)  # already loaded
@@ -51,7 +53,9 @@ class DescriptorMixin(DescriptorBase):
 
 
 class ForwardDescriptorMixin(DescriptorMixin):
-    def _should_prefetch(self, instance: models.Model | None) -> bool:
+    def _should_prefetch(
+        self, instance: models.Model | None
+    ) -> TypeGuard[models.Model]:
         return super()._should_prefetch(
             instance
         ) and None not in self.field.get_local_related_value(instance)  # field is null
@@ -90,7 +94,9 @@ class ReverseDescriptorMixin:
         except AttributeError:
             return False
 
-    def _should_prefetch(self, instance: models.Model | None) -> bool:
+    def _should_prefetch(
+        self, instance: models.Model | None
+    ) -> TypeGuard[models.Model]:
         prefetch_lock_attr = self._get_lock_attr()
         if getattr(instance, prefetch_lock_attr, False):
             return False
@@ -105,7 +111,9 @@ class ReverseDescriptorMixin:
         cache_name = self._get_cache_name()
         return f"_prefetching_{cache_name}"
 
-    def __get__(self, instance, cls=None):
+    def __get__(
+        self, instance: models.Model | None, cls: type[models.Model] | None = None
+    ) -> Any:
         if self._should_prefetch(instance):
             field_name = self._get_cache_name()
             prefetch = models.query.Prefetch(field_name)
@@ -127,7 +135,7 @@ class ReverseDescriptorMixin:
                     except AttributeError:
                         pass
 
-        return super().__get__(instance, cls)
+        return super().__get__(instance, cls)  # type: ignore[misc]
 
 
 class ReverseManyToOneDescriptor(
@@ -158,11 +166,15 @@ class OneToOneField(models.OneToOneField):
 
 
 class ManyToManyField(models.ManyToManyField):
-    def contribute_to_class(self, cls, name, **kwargs):
+    def contribute_to_class(
+        self, cls: type[models.Model], name: str, **kwargs: Any
+    ) -> None:
         super().contribute_to_class(cls, name, **kwargs)
         setattr(cls, self.name, ManyToManyDescriptor(self.remote_field, reverse=False))
 
-    def contribute_to_related_class(self, cls, related):
+    def contribute_to_related_class(
+        self, cls: type[models.Model], related: Any
+    ) -> None:
         super().contribute_to_related_class(cls, related)
         setattr(
             cls,
