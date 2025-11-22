@@ -79,60 +79,9 @@ class ReverseOneToOneDescriptor(
         return self.related.get_accessor_name()
 
 
-class ReverseManyToOneDescriptor(related_descriptors.ReverseManyToOneDescriptor):
-    def _is_cached(self, instance: models.Model) -> bool:
-        try:
-            cache_name = self.rel.get_accessor_name()
-            return cache_name in getattr(instance, "_prefetched_objects_cache", {})
-        except AttributeError:
-            return False
-
-    def _should_prefetch(self, instance: models.Model | None) -> bool:
-        prefetch_lock_attr = f"_prefetching_{self.rel.get_accessor_name()}"
-        if getattr(instance, prefetch_lock_attr, False):
-            return False
-
-        return (
-            instance is not None
-            and not self._is_cached(instance)
-            and len(getattr(instance, "_peers", [])) >= 2
-        )
-
-    def __get__(self, instance, cls=None):
-        if self._should_prefetch(instance):
-            field_name = self.rel.get_accessor_name()
-            prefetch = models.query.Prefetch(field_name)
-
-            prefetch_lock_attr = f"_prefetching_{field_name}"
-            peers = []
-            for p in instance._peers.values():
-                if not self._is_cached(p) and not getattr(p, prefetch_lock_attr, False):
-                    setattr(p, prefetch_lock_attr, True)
-                    peers.append(p)
-
-            try:
-                if peers:
-                    models.query.prefetch_related_objects(peers, prefetch)
-            finally:
-                for p in peers:
-                    try:
-                        delattr(p, prefetch_lock_attr)
-                    except AttributeError:
-                        pass
-
-        return super().__get__(instance, cls)
-
-
-class ManyToManyDescriptor(related_descriptors.ManyToManyDescriptor):
+class ReverseDescriptorMixin:
     def _get_cache_name(self) -> str:
-        if not self.reverse:
-            return self.field.name
-        else:
-            return self.field.related_query_name()
-
-    def _get_lock_attr(self) -> str:
-        cache_name = self._get_cache_name()
-        return f"_prefetching_{cache_name}"
+        raise NotImplementedError
 
     def _is_cached(self, instance: models.Model) -> bool:
         try:
@@ -151,6 +100,10 @@ class ManyToManyDescriptor(related_descriptors.ManyToManyDescriptor):
             and not self._is_cached(instance)
             and len(getattr(instance, "_peers", [])) >= 2
         )
+
+    def _get_lock_attr(self) -> str:
+        cache_name = self._get_cache_name()
+        return f"_prefetching_{cache_name}"
 
     def __get__(self, instance, cls=None):
         if self._should_prefetch(instance):
@@ -175,6 +128,23 @@ class ManyToManyDescriptor(related_descriptors.ManyToManyDescriptor):
                         pass
 
         return super().__get__(instance, cls)
+
+
+class ReverseManyToOneDescriptor(
+    ReverseDescriptorMixin, related_descriptors.ReverseManyToOneDescriptor
+):
+    def _get_cache_name(self) -> str:
+        return self.rel.get_accessor_name()
+
+
+class ManyToManyDescriptor(
+    ReverseDescriptorMixin, related_descriptors.ManyToManyDescriptor
+):
+    def _get_cache_name(self) -> str:
+        if not self.reverse:
+            return self.field.name
+        else:
+            return self.field.related_query_name()
 
 
 class ForeignKey(models.ForeignKey):
