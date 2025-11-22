@@ -137,7 +137,7 @@ reducing or eliminating all of the noted usability issues.
 
 Some important points:
 
-* ``ManyToManyField``\s and ``ForeignKey``\s reverse relations are not changed 
+* ``ManyToManyField``\s and ``ForeignKey``\s reverse relations are not changed
   at all unless you explicitly enable that behavior via the
   ``AUTO_PREFETCH_ENABLE_FOR_RELATED_FIELDS`` setting. This is because
   prefetching many-to-many relations can lead to a row count explosion.
