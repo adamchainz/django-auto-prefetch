@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import gc
-
 import pytest
 from django.db import transaction
 
