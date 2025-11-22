@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, TypeGuard
 from weakref import WeakValueDictionary
 
+from django.conf import settings
 from django.core import checks
 from django.db import models
 from django.db.models.fields import related_descriptors
@@ -144,6 +145,13 @@ class ReverseManyToOneDescriptor(
     def _get_cache_name(self) -> str:
         return self.rel.get_accessor_name()
 
+    def _should_prefetch(
+        self, instance: models.Model | None
+    ) -> TypeGuard[models.Model]:
+        if not getattr(settings, "AUTO_PREFETCH_ENABLE_FOR_RELATED_FIELDS", False):
+            return False
+        return super()._should_prefetch(instance)
+
 
 class ManyToManyDescriptor(
     ReverseDescriptorMixin, related_descriptors.ManyToManyDescriptor
@@ -153,6 +161,13 @@ class ManyToManyDescriptor(
             return self.field.name
         else:
             return self.field.related_query_name()
+
+    def _should_prefetch(
+        self, instance: models.Model | None
+    ) -> TypeGuard[models.Model]:
+        if not getattr(settings, "AUTO_PREFETCH_ENABLE_FOR_RELATED_FIELDS", False):
+            return False
+        return super()._should_prefetch(instance)
 
 
 class ForeignKey(models.ForeignKey):
