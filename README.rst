@@ -137,7 +137,6 @@ reducing or eliminating all of the noted usability issues.
 
 Some important points:
 
-* ``ManyToManyField``\s are not changed at all.
 * Because these are ``ForeignKey`` and ``OneToOneField``\s, the
   generated queries can’t have more result rows than the original query
   and may have less. This eliminates any concern about a multiplicative
