@@ -10,7 +10,7 @@ from .models import AssociatePrefetch, Author, PrefetchBook, PrefetchM2M
 @pytest.mark.django_db
 @override_settings(AUTO_PREFETCH_ENABLE_FOR_RELATED_FIELDS=False)
 def test_m2m_disabled_forward(django_assert_num_queries):
-    for i in range(3):
+    for _ in range(3):
         obj = PrefetchM2M.objects.create()
         for j in range(3):
             assoc = AssociatePrefetch.objects.create(number=j)
