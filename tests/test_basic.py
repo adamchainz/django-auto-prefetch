@@ -5,22 +5,29 @@ import pickle
 
 import pytest
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import models
+from django.db import connection, models
+from django.test.utils import CaptureQueriesContext
 
 import auto_prefetch
 
 from .models import (
     Associate,
+    AssociatePrefetch,
+    Author,
     Friend,
     MixedField,
     MixedModel,
     Prefetch,
     Prefetch2,
+    PrefetchBook,
     PrefetchForward,
+    PrefetchM2M,
     PrefetchReverse,
     Vanilla,
     Vanilla2,
+    VanillaBook,
     VanillaForward,
+    VanillaM2M,
     VanillaReverse,
 )
 
@@ -307,3 +314,158 @@ def test_pickle(django_assert_num_queries, Model, queries):
         for obj in Model.objects.all():
             obj = pickle.loads(pickle.dumps(obj))
             print(obj.pk, obj.friend.pk)
+
+
+# Tests for reverse ForeignKey with auto_prefetch
+@pytest.mark.parametrize(
+    "BookModel,queries",
+    [(VanillaBook, 4), (PrefetchBook, 2)],
+)
+@pytest.mark.django_db
+def test_reverse_foreignkey(django_assert_num_queries, BookModel, queries):
+    authors = [Author.objects.create(name=f"Author {i}") for i in range(3)]
+    for author in authors:
+        BookModel.objects.create(title=f"Book by {author.name}", author=author)
+
+    with django_assert_num_queries(queries):
+        for author in Author.objects.all():
+            # Access reverse relation
+            books = list(
+                author.prefetch_books.all()
+                if BookModel == PrefetchBook
+                else author.vanilla_books.all()
+            )
+            print(author.pk, len(books))
+
+
+@pytest.mark.parametrize(
+    "BookModel,queries",
+    [(VanillaBook, 2), (PrefetchBook, 2)],
+)
+@pytest.mark.django_db
+def test_reverse_foreignkey_no_peers(django_assert_num_queries, BookModel, queries):
+    author = Author.objects.create(name="Author")
+    BookModel.objects.create(title="Book", author=author)
+
+    with django_assert_num_queries(queries):
+        for author in Author.objects.all():
+            books = list(
+                author.prefetch_books.all()
+                if BookModel == PrefetchBook
+                else author.vanilla_books.all()
+            )
+            print(author.pk, len(books))
+
+
+@pytest.mark.django_db
+def test_reverse_foreignkey_multiple_access():
+    authors = [Author.objects.create(name=f"Author {i}") for i in range(3)]
+    for author in authors:
+        PrefetchBook.objects.create(title=f"Book by {author.name}", author=author)
+
+    with CaptureQueriesContext(connection) as context:
+        authors_list = list(Author.objects.all())
+        for author in authors_list:
+            books1 = list(author.prefetch_books.all())
+            books2 = list(author.prefetch_books.all())
+            print(author.pk, len(books1), len(books2))
+
+    assert len(context.captured_queries) == 2
+
+
+# Tests for ManyToManyField with auto_prefetch
+@pytest.mark.parametrize(
+    "M2MModel,queries",
+    [
+        (VanillaM2M, 4),
+        (PrefetchM2M, 2),
+    ],
+)
+@pytest.mark.django_db
+def test_manytomany_forward(django_assert_num_queries, M2MModel, queries):
+    associates = [AssociatePrefetch.objects.create(number=i) for i in range(3)]
+    for _ in range(3):
+        obj = M2MModel.objects.create()
+        obj.associates.set(associates)
+
+    with django_assert_num_queries(queries):
+        for obj in M2MModel.objects.all():
+            assoc_list = list(obj.associates.all())
+            print(obj.pk, len(assoc_list))
+
+
+@pytest.mark.parametrize(
+    "M2MModel,queries",
+    [
+        (VanillaM2M, 2),
+        (PrefetchM2M, 2),
+    ],
+)
+@pytest.mark.django_db
+def test_manytomany_forward_no_peers(django_assert_num_queries, M2MModel, queries):
+    associates = [AssociatePrefetch.objects.create(number=i) for i in range(3)]
+    obj = M2MModel.objects.create()
+    obj.associates.set(associates)
+
+    with django_assert_num_queries(queries):
+        for obj in M2MModel.objects.all():
+            assoc_list = list(obj.associates.all())
+            print(obj.pk, len(assoc_list))
+
+
+@pytest.mark.parametrize(
+    "M2MModel,queries",
+    [
+        (VanillaM2M, 4),
+        (PrefetchM2M, 2),
+    ],
+)
+@pytest.mark.django_db
+def test_manytomany_reverse(django_assert_num_queries, M2MModel, queries):
+    associates = [AssociatePrefetch.objects.create(number=i) for i in range(3)]
+    for assoc in associates:
+        obj = M2MModel.objects.create()
+        obj.associates.set([assoc])
+
+    with django_assert_num_queries(queries):
+        for assoc in AssociatePrefetch.objects.all():
+            models = list(
+                assoc.prefetch_m2m_set.all()
+                if M2MModel == PrefetchM2M
+                else assoc.vanilla_m2m_set.all()
+            )
+            print(assoc.pk, len(models))
+
+
+@pytest.mark.django_db
+def test_manytomany_prefetch_lock():
+    associates = [AssociatePrefetch.objects.create(number=i) for i in range(3)]
+    for _ in range(3):
+        obj = PrefetchM2M.objects.create()
+        obj.associates.set(associates)
+
+    with CaptureQueriesContext(connection) as context:
+        objs = list(PrefetchM2M.objects.all())
+        for obj in objs:
+            assoc1 = list(obj.associates.all())
+            assoc2 = list(obj.associates.all())
+            print(obj.pk, len(assoc1), len(assoc2))
+
+    assert len(context.captured_queries) == 2
+
+
+@pytest.mark.django_db
+def test_reverse_foreignkey_prefetch_lock():
+    authors = [Author.objects.create(name=f"Author {i}") for i in range(3)]
+    for author in authors:
+        PrefetchBook.objects.create(title=f"Book by {author.name}", author=author)
+
+    authors_list = list(Author.objects.all())
+
+    for author in authors_list:
+        _ = list(author.prefetch_books.all())
+        assert not hasattr(author, "_prefetching_prefetch_books")
+
+    for author in authors_list:
+        _ = list(author.prefetch_books.all())
+        assert not hasattr(author, "_prefetching_prefetch_books")
