@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeGuard
 from weakref import WeakValueDictionary
 
+from django.conf import settings
 from django.core import checks
 from django.db import models
 from django.db.models.fields import related_descriptors
@@ -31,7 +32,9 @@ class DescriptorMixin(DescriptorBase):
     def _is_cached(self, instance: models.Model) -> bool:
         return self.is_cached(instance)
 
-    def _should_prefetch(self, instance: models.Model | None) -> bool:
+    def _should_prefetch(
+        self, instance: models.Model | None
+    ) -> TypeGuard[models.Model]:
         return (
             instance is not None  # getattr on the class passes None to the descriptor
             and not self._is_cached(instance)  # already loaded
@@ -51,7 +54,9 @@ class DescriptorMixin(DescriptorBase):
 
 
 class ForwardDescriptorMixin(DescriptorMixin):
-    def _should_prefetch(self, instance: models.Model | None) -> bool:
+    def _should_prefetch(
+        self, instance: models.Model | None
+    ) -> TypeGuard[models.Model]:
         return super()._should_prefetch(
             instance
         ) and None not in self.field.get_local_related_value(instance)  # field is null
@@ -79,13 +84,118 @@ class ReverseOneToOneDescriptor(
         return self.related.get_accessor_name()
 
 
+class ReverseDescriptorMixin:
+    def _get_cache_name(self) -> str:
+        raise NotImplementedError
+
+    def _is_cached(self, instance: models.Model) -> bool:
+        try:
+            cache_name = self._get_cache_name()
+            return cache_name in getattr(instance, "_prefetched_objects_cache", {})
+        except AttributeError:
+            return False
+
+    def _should_prefetch(
+        self, instance: models.Model | None
+    ) -> TypeGuard[models.Model]:
+        prefetch_lock_attr = self._get_lock_attr()
+        if getattr(instance, prefetch_lock_attr, False):
+            return False
+
+        return (
+            instance is not None
+            and not self._is_cached(instance)
+            and len(getattr(instance, "_peers", [])) >= 2
+        )
+
+    def _get_lock_attr(self) -> str:
+        cache_name = self._get_cache_name()
+        return f"_prefetching_{cache_name}"
+
+    def __get__(
+        self, instance: models.Model | None, cls: type[models.Model] | None = None
+    ) -> Any:
+        if self._should_prefetch(instance):
+            field_name = self._get_cache_name()
+            prefetch = models.query.Prefetch(field_name)
+
+            prefetch_lock_attr = self._get_lock_attr()
+            peers = []
+            for p in instance._peers.values():
+                if not self._is_cached(p) and not getattr(p, prefetch_lock_attr, False):
+                    setattr(p, prefetch_lock_attr, True)
+                    peers.append(p)
+
+            try:
+                if peers:
+                    models.query.prefetch_related_objects(peers, prefetch)
+            finally:
+                for p in peers:
+                    try:
+                        delattr(p, prefetch_lock_attr)
+                    except AttributeError:
+                        pass
+
+        return super().__get__(instance, cls)  # type: ignore[misc]
+
+
+class ReverseManyToOneDescriptor(
+    ReverseDescriptorMixin, related_descriptors.ReverseManyToOneDescriptor
+):
+    def _get_cache_name(self) -> str:
+        return self.rel.get_accessor_name()
+
+    def _should_prefetch(
+        self, instance: models.Model | None
+    ) -> TypeGuard[models.Model]:
+        if not getattr(settings, "AUTO_PREFETCH_ENABLE_FOR_RELATED_FIELDS", False):
+            return False
+        return super()._should_prefetch(instance)
+
+
+class ManyToManyDescriptor(
+    ReverseDescriptorMixin, related_descriptors.ManyToManyDescriptor
+):
+    def _get_cache_name(self) -> str:
+        if not self.reverse:
+            return self.field.name
+        else:
+            return self.field.related_query_name()
+
+    def _should_prefetch(
+        self, instance: models.Model | None
+    ) -> TypeGuard[models.Model]:
+        if not getattr(settings, "AUTO_PREFETCH_ENABLE_FOR_RELATED_FIELDS", False):
+            return False
+        return super()._should_prefetch(instance)
+
+
 class ForeignKey(models.ForeignKey):
     forward_related_accessor_class = ForwardManyToOneDescriptor
+    related_accessor_class = ReverseManyToOneDescriptor
 
 
 class OneToOneField(models.OneToOneField):
     forward_related_accessor_class = ForwardOneToOneDescriptor
     related_accessor_class = ReverseOneToOneDescriptor
+
+
+class ManyToManyField(models.ManyToManyField):
+    def contribute_to_class(
+        self, cls: type[models.Model], name: str, **kwargs: Any
+    ) -> None:
+        super().contribute_to_class(cls, name, **kwargs)
+        setattr(cls, self.name, ManyToManyDescriptor(self.remote_field, reverse=False))
+
+    def contribute_to_related_class(
+        self, cls: type[models.Model], related: Any
+    ) -> None:
+        super().contribute_to_related_class(cls, related)
+        setattr(
+            cls,
+            related.get_accessor_name(),
+            ManyToManyDescriptor(self.remote_field, reverse=True),
+        )
 
 
 class QuerySet(models.QuerySet):
