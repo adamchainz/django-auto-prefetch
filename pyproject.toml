@@ -17,9 +17,6 @@ authors = [
 requires-python = ">=3.10"
 classifiers = [
   "Development Status :: 5 - Production/Stable",
-  "Framework :: Django :: 4.2",
-  "Framework :: Django :: 5.0",
-  "Framework :: Django :: 5.1",
   "Framework :: Django :: 5.2",
   "Framework :: Django :: 6.0",
   "Intended Audience :: Developers",
@@ -35,7 +32,7 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
-  "django>=4.2",
+  "django>=5.2",
 ]
 urls.Changelog = "https://github.com/tolomea/django-auto-prefetch/blob/main/CHANGELOG.rst"
 urls.Repository = "https://github.com/tolomea/django-auto-prefetch"
@@ -47,9 +44,6 @@ test = [
   "pytest-django",
   "pytest-randomly",
 ]
-django42 = [ "django>=4.2a1,<5; python_version>='3.8'" ]
-django50 = [ "django>=5a1,<5.1; python_version>='3.10'" ]
-django51 = [ "django>=5.1a1,<5.2; python_version>='3.10'" ]
 django52 = [ "django>=5.2a1,<6; python_version>='3.10'" ]
 django60 = [ "django>=6a1,<6.1; python_version>='3.12'" ]
 
