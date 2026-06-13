@@ -19,3 +19,6 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 INSTALLED_APPS = ["tests"]
 
 USE_TZ = True
+
+# Enable auto-prefetching for ManyToMany and reverse ForeignKey relationships
+AUTO_PREFETCH_ENABLE_FOR_RELATED_FIELDS = True
