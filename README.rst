@@ -137,7 +137,10 @@ reducing or eliminating all of the noted usability issues.
 
 Some important points:
 
-* ``ManyToManyField``\s are not changed at all.
+* ``ManyToManyField``\s and ``ForeignKey``\s reverse relations are not changed
+  at all unless you explicitly enable that behavior via the
+  ``AUTO_PREFETCH_ENABLE_FOR_RELATED_FIELDS`` setting. This is because
+  prefetching many-to-many relations can lead to a row count explosion.
 * Because these are ``ForeignKey`` and ``OneToOneField``\s, the
   generated queries can’t have more result rows than the original query
   and may have less. This eliminates any concern about a multiplicative
